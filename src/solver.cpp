@@ -87,8 +87,8 @@ void Solver::DensStep()
 	AddSource(dens, dens_prev);			//Adding input density (dens_prev) to final density (dens).
 	SWAP(dens_prev, dens)				//Swapping matrixes, because we want save the next result in dens, not in dens_prev.
 	Diffuse(0, dens, dens_prev);		//Writing result in dens because we made the swap before. bi = dens_prev. The initial trash in dens matrix, doesnt matter, because it converges anyways.
-	//SWAP(dens_prev, dens)				//Swapping matrixes, because we want save the next result in dens, not in dens_prev.
-	//Advect(0, dens, dens_prev, u, v);	//Advect phase, result in dens.
+	SWAP(dens_prev, dens)				//Swapping matrixes, because we want save the next result in dens, not in dens_prev.
+	Advect(0, dens, dens_prev, u, v);	//Advect phase, result in dens.
 }
 
 void Solver::VelStep()
@@ -100,11 +100,11 @@ void Solver::VelStep()
 	Diffuse(1, u, u_prev);  
 	Diffuse(2, v, v_prev); 
 	Project(u, v, u_prev, v_prev);		//Mass conserving.
-	//SWAP (u_prev,u)			
-	//SWAP (v_prev,v)
-	//Advect(1, u, u_prev, u_prev, v_prev);
-	//Advect(2, v, v_prev, u_prev, v_prev);
-	//Project(u, v, u_prev, v_prev);		//Mass conserving.
+	SWAP (u_prev,u)			
+	SWAP (v_prev,v)
+	Advect(1, u, u_prev, u_prev, v_prev);
+	Advect(2, v, v_prev, u_prev, v_prev);
+	Project(u, v, u_prev, v_prev);		//Mass conserving.
 }
 
 void Solver::AddSource(float * base, float * source)
@@ -177,11 +177,22 @@ en las posiciones x,5.
 */
 void Solver::Advect(int b, float * d, float * d0, float * u, float * v)
 {
-//TODO: Se aplica el campo vectorial realizando una interploación lineal entre las 4 casillas más cercanas donde caiga el nuevo valor.
+    int i, j, i0, j0, i1, j1;
+    float x, y, s0, t0, s1, t1, dt0;
 
-
-	
-
+    dt0 = dt * N;
+    for (i = 1; i <= N; i++) {
+        for (j = 1; j <= N; j++) {
+            x = i - dt0 * u[XY_TO_ARRAY(i, j)];
+            y = j - dt0 * v[XY_TO_ARRAY(i, j)];
+            if (x < 0.5f) x = 0.5f; if (x > N + 0.5f) x = N + 0.5f; i0 = (int)x; i1 = i0 + 1;
+            if (y < 0.5f) y = 0.5f; if (y > N + 0.5f) y = N + 0.5f; j0 = (int)y; j1 = j0 + 1;
+            s1 = x - i0; s0 = 1 - s1; t1 = y - j0; t0 = 1 - t1;
+            d[XY_TO_ARRAY(i, j)] = s0 * (t0 * d0[XY_TO_ARRAY(i0, j0)] + t1 * d0[XY_TO_ARRAY(i0, j1)]) +
+                                   s1 * (t0 * d0[XY_TO_ARRAY(i1, j0)] + t1 * d0[XY_TO_ARRAY(i1, j1)]);
+        }
+    }
+    SetBounds(b, d);
 }
 
 /*
