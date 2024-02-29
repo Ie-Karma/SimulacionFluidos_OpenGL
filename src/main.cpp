@@ -6,7 +6,7 @@
 
 /* global variables */
 static int N;
-static float dt, diff, visc;
+static float dt, diff, visc, grav;
 static float force, source;
 static bool dvel;
 
@@ -15,7 +15,7 @@ static int win_x, win_y;	//Window Size.
 static int mouse_down[3];	//Mouse button states.
 static int omx, omy, mx, my;
 
-static Solver solver;
+static solver solver;
 
 /*
 ----------------------------------------------------------------------
@@ -111,11 +111,11 @@ static void AddInteractionFromUI()
 	if (i<1 || i>N || j<1 || j>N) return;
 
 	if (mouse_down[GLUT_LEFT_BUTTON]) {
-		solver.AddVelocity(i, j, force * (mx - omx), force * (omy - my));
+		solver.add_velocity(i, j, force * (mx - omx), force * (omy - my));
 	}
 
 	if (mouse_down[GLUT_RIGHT_BUTTON]) {
-		solver.AddDensity(i, j, source);
+		solver.add_density(i, j, source);
 	}
 
 	omx = mx;
@@ -136,12 +136,12 @@ static void KeyFunc(unsigned char key, int x, int y)
 	{
 	case 'c':
 	case 'C':
-		solver.ClearData();
+		solver.clear_data();
 		break;
 
 	case 'q':
 	case 'Q':
-		solver.FreeData();
+		solver.free_data();
 		exit(0);
 		break;
 
@@ -177,10 +177,10 @@ static void ReshapeFunc(int width, int height)
 
 static void IdleFunc(void)
 {
-	solver.ClearPrevData(); //Clean last step forces
+	solver.clear_prev_data(); //Clean last step forces
 	AddInteractionFromUI();	//Add Forces and Densities
 
-	solver.Solve();			//Calculate the next step
+	solver.solve();			//Calculate the next step
 
 	glutSetWindow(win_id);
 	glutPostRedisplay();
@@ -249,12 +249,13 @@ int main(int argc, char ** argv)
 	}
 
 	if (argc == 1) {
-		N = 64;
+		N = 150;
 		dt = 0.1f;
 		diff = 0.0001f;
 		visc = 0.0f;
 		force = 5.0f;
 		source = 100.0f;
+		grav = 0.0f;
 		fprintf(stderr, "Using defaults : N=%d dt=%g diff=%g visc=%g force = %g source=%g\n",
 			N, dt, diff, visc, force, source);
 	}
@@ -265,6 +266,7 @@ int main(int argc, char ** argv)
 		visc = atof(argv[4]);
 		force = atof(argv[5]);
 		source = atof(argv[6]);
+		grav = atof(argv[7]);
 	}
 
 	printf("\n\nHow to use this demo:\n\n");
@@ -276,9 +278,9 @@ int main(int argc, char ** argv)
 
 	dvel = false;
 	
-	solver.Init(N, dt, diff, visc);
+	solver.init(N, dt, diff, visc, solver::SOR);
 
-	if (!solver.AllocateData()) exit(1);
+	if (!solver.allocate_data()) exit(1);
 	
 	win_x = 512;
 	win_y = 512;
