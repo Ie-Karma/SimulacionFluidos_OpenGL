@@ -21,7 +21,7 @@ public:
 	float * u, * v, * dens;
 	void init(unsigned n, float dt, float diff, float visc, SolverMethod method);
 	void free_data(void) const;
-	void clear_data(void);
+	void clear_data(void) const;
 	bool allocate_data(void);
 	void clear_prev_data(void) const;
 	void add_density(unsigned i, unsigned j, float source) const;
@@ -40,7 +40,7 @@ private:
 	void jacobi_project(float* p, float* v, float* p1, float* div) const;
 	void gauss_seidel_project(float* p, float* v, float* p1, float* div) const;
 	void sor_project(float* p, float* v, float* p1, float* div) const;
-	void project(float * u, float * v, float * p, float * div);
+	void project(float * u, float * v, float * p, float * div) const;
 };
 
 #endif
