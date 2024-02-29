@@ -279,7 +279,7 @@ int main(int argc, char ** argv)
 	solver.Init(N, dt, diff, visc);
 
 	if (!solver.AllocateData()) exit(1);
-
+	
 	win_x = 512;
 	win_y = 512;
 	OpenGlutWindow();

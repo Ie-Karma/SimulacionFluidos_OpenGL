@@ -16,36 +16,64 @@ free/clear/allocate simulation data
 */
 void Solver::FreeData(void)
 {
-//TODO: Libera los buffers de memoria.
+	free(u);
+	free(v);
+	free(dens);
+
+	free(u_prev);
+	free(v_prev);
+	free(dens_prev);
 }
 
 void Solver::ClearData(void)
 {
-//TODO: Borra todo el contenido de los buffers
+
+	for (int i = 0; i < (N + 2) * (N + 2); i++) {
+		u[i] = v[i] = dens[i] = 0.0f;
+	}
+	ClearPrevData();
+	
 }
 
 bool Solver::AllocateData(void)
 {
-//TODO:
-//Reservamos memoria, en caso de fallo devlvemos false.
-//Antes de devolver true, hay que limpiar la memoria reservada con un ClearData().
-	
-	return false;
-}
 
-void Solver::ClearPrevData() 
+	u = (float *)malloc((N + 2) * (N + 2) * sizeof(float));
+	v = (float *)malloc((N + 2) * (N + 2) * sizeof(float));
+	dens = (float *)malloc((N + 2) * (N + 2) * sizeof(float));
+
+	u_prev = (float *)malloc((N + 2) * (N + 2) * sizeof(float));
+	v_prev = (float *)malloc((N + 2) * (N + 2) * sizeof(float));
+
+	dens_prev = (float *)malloc((N + 2) * (N + 2) * sizeof(float));
+
+	if (u != NULL || v != NULL || dens != NULL || u_prev != NULL || v_prev != NULL || dens_prev != NULL) {
+		ClearData();
+		return true;
+	}
+	
+    return false;
+}
+void Solver::ClearPrevData()
 {
-//TODO: Borra el contenido de los buffers _prev
+
+	for (int i = 0; i < (N + 2) * (N + 2); i++)
+	{
+		u_prev[i] = v_prev[i] = dens_prev[i] = 0.0f;
+	}
+	
+	
 }
 
 void Solver::AddDensity(unsigned x, unsigned y, float source)
 {
-//TODO: Añade el valor de source al array de densidades. Sería interesante usar la macro: XY_TO_ARRAY
+	dens[XY_TO_ARRAY(x, y)] += source;
 }
 
 void Solver::AddVelocity(unsigned x, unsigned y, float forceX, float forceY)
 {
-//TODO: Añade el valor de fuerza a sus respectivos arrays. Sería interesante usar la macro: XY_TO_ARRAY
+	u[XY_TO_ARRAY(x, y)] += forceX;
+	v[XY_TO_ARRAY(x, y)] += forceY;
 }
 
 void Solver::Solve()
@@ -81,7 +109,9 @@ void Solver::VelStep()
 
 void Solver::AddSource(float * base, float * source)
 {
-//TODO: Teniendo en cuenta dt (Delta Time), incrementar el array base con nuestro source. Esto sirve tanto para añadir las nuevas densidades como las nuevas fuerzas.
+	int i, size = (N + 2) * (N + 2);
+	for (i = 0; i < size; i++)
+		base[i] += dt * source[i];
 }
 
 
@@ -94,6 +124,19 @@ Input b: 0, 1 or 2.
 	2: y axis borders inverted, x axis equal.
 	Corner values allways are mean value between associated edges.
 */
+
+	int i;
+	for (i = 1; i <= N; i++) {
+		x[XY_TO_ARRAY(0, i)] = b == 1 ? -x[XY_TO_ARRAY(1, i)] : x[XY_TO_ARRAY(1, i)];
+		x[XY_TO_ARRAY(N + 1, i)] = b == 1 ? -x[XY_TO_ARRAY(N, i)] : x[XY_TO_ARRAY(N, i)];
+		x[XY_TO_ARRAY(i, 0)] = b == 2 ? -x[XY_TO_ARRAY(i, 1)] : x[XY_TO_ARRAY(i, 1)];
+		x[XY_TO_ARRAY(i, N + 1)] = b == 2 ? -x[XY_TO_ARRAY(i, N)] : x[XY_TO_ARRAY(i, N)];
+	}
+	x[XY_TO_ARRAY(0, 0)] = 0.5f*(x[XY_TO_ARRAY(1, 0)] + x[XY_TO_ARRAY(0, 1)]);
+	x[XY_TO_ARRAY(0, N + 1)] = 0.5f*(x[XY_TO_ARRAY(1, N + 1)] + x[XY_TO_ARRAY(0, N)]);
+	x[XY_TO_ARRAY(N + 1, 0)] = 0.5f*(x[XY_TO_ARRAY(N, 0)] + x[XY_TO_ARRAY(N + 1, 1)]);
+	x[XY_TO_ARRAY(N + 1, N + 1)] = 0.5f*(x[XY_TO_ARRAY(N, N + 1)] + x[XY_TO_ARRAY(N + 1, N)]);
+	
 }
 
 /*
@@ -105,6 +148,13 @@ Gauss Seidel -> Matrix x and x0
 void Solver::LinSolve(int b, float * x, float * x0, float aij, float aii)
 {
 //TODO: Se recomienda usar FOR_EACH_CELL, END_FOR y XY_TO_ARRAY.
+	int i, j, k;
+	for (k = 0; k < 20; k++) {
+		FOR_EACH_CELL
+			x[XY_TO_ARRAY(i, j)] = (x0[XY_TO_ARRAY(i, j)] + aij * (x[XY_TO_ARRAY(i - 1, j)] + x[XY_TO_ARRAY(i + 1, j)] + x[XY_TO_ARRAY(i, j - 1)] + x[XY_TO_ARRAY(i, j + 1)])) / aii;
+		END_FOR
+		SetBounds(b, x);
+	}
 }
 
 /*
@@ -114,6 +164,10 @@ por lo que solo con la entrada de dos valores, debemos poder obtener el resultad
 void Solver::Diffuse(int b, float * x, float * x0)
 {
 //TODO: Solo necesitaremos pasar dos parámetros a nuestro resolutor de sistemas de ecuaciones de Gauss Seidel. Calculamos dichos valores y llamamos a la resolución del sistema.
+
+	float a = dt * diff * N * N;
+	LinSolve(b, x, x0, a, 1 + 4 * a);
+	
 }
 
 /*
@@ -124,6 +178,10 @@ en las posiciones x,5.
 void Solver::Advect(int b, float * d, float * d0, float * u, float * v)
 {
 //TODO: Se aplica el campo vectorial realizando una interploación lineal entre las 4 casillas más cercanas donde caiga el nuevo valor.
+
+
+	
+
 }
 
 /*
