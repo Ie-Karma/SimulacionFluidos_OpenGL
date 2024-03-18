@@ -15,6 +15,7 @@
     <ClCompile Include="..\src\solver.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\include\GLInclude.h" />
     <ClInclude Include="..\include\solver.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
