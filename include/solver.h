@@ -14,12 +14,9 @@ class solver
 	float * u_prev = nullptr, * v_prev = nullptr, * dens_prev = nullptr;
 
 public:
-
-	typedef enum { JACOBI, GAUSS_SEIDEL, SOR } SolverMethod;
-
-	SolverMethod method;
+	
 	float * u, * v, * dens;
-	void init(unsigned n, float dt, float diff, float visc, SolverMethod method);
+	void init(unsigned n, float dt, float diff, float visc);
 	void free_data(void) const;
 	void clear_data(void) const;
 	bool allocate_data(void);
@@ -37,9 +34,6 @@ private:
 	void lin_solve( int b, float * x, const float * x0, float a, float c) const;
 	void diffuse(int b, float * x, const float * x0) const;
 	void advect(int b, float * d, const float * d0, const float * u, const float * v) const;
-	void jacobi_project(float* p, float* v, float* p1, float* div) const;
-	void gauss_seidel_project(float* p, float* v, float* p1, float* div) const;
-	void sor_project(float* p, float* v, float* p1, float* div) const;
 	void project(float * u, float * v, float * p, float * div) const;
 };
 

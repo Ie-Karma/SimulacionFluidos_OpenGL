@@ -278,7 +278,7 @@ int main(int argc, char ** argv)
 
 	dvel = false;
 	
-	solver.init(N, dt, diff, visc, solver::GAUSS_SEIDEL);
+	solver.init(N, dt, diff, visc);
 
 	if (!solver.allocate_data()) exit(1);
 	

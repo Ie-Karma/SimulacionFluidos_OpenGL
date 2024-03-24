@@ -1,15 +1,13 @@
 #include "solver.h"
 #include <stdlib.h>
-#include <stdio.h>
 
-void solver::init(const unsigned n, const float dt, const float diff, const float visc, SolverMethod method)
+void solver::init(const unsigned n, const float dt, const float diff, const float visc)
 {
     // Inicializa las variables de la simulación con los valores proporcionados.
 	this->dt_ = dt;  // Intervalo de tiempo para cada paso de la simulación.
 	this->diff_ = diff;  // Coeficiente de difusión.
 	this->visc_ = visc;  // Viscosidad del fluido.
 	this->N = n;  // Tamaño de la cuadrícula.
-	this->method = method;  // Método de resolución a utilizar.
 }
 
 bool solver::allocate_data(void)
@@ -144,12 +142,15 @@ auto solver::set_bounds(const int b, float* x) const -> void
 
 void solver::lin_solve(const int b, float * x, const float * x0, const float a, const float c) const
 {
-    // Resuelve el sistema lineal utilizando el método de Jacobi.
+    // Iteramos 20 veces (número fijo de iteraciones para este código)
 	int i, j;
 	for (int k = 0; k < 20; k++) {
+		// Recorremos cada celda de la cuadrícula
 		FOR_EACH_CELL
+		// Actualizamos el valor de x en la celda actual usando la fórmula de Gauss-Seidel
 			x[XY_TO_ARRAY(i, j)] = (x0[XY_TO_ARRAY(i, j)] + a * (x[XY_TO_ARRAY(i - 1, j)] + x[XY_TO_ARRAY(i + 1, j)] + x[XY_TO_ARRAY(i, j - 1)] + x[XY_TO_ARRAY(i, j + 1)])) / c;
 		END_FOR
+		// Aplicamos las condiciones de contorno a la matriz x
 		set_bounds(b, x);
 	}
 }
@@ -179,7 +180,10 @@ void solver::advect(const int b, float * d, const float * d0, const float * u, c
             if (y < 0.5f) y = 0.5f; if (y > N + 0.5f) y = N + 0.5f; int j0 = (int)y; int j1 = j0 + 1;
 
             // Calculamos los pesos para la interpolación lineal.
-            const float s1 = x - i0; float s0 = 1 - s1; float t1 = y - j0; float t0 = 1 - t1;
+            const float s1 = x - i0;
+            const float s0 = 1 - s1;
+            const float t1 = y - j0;
+            const float t0 = 1 - t1;
 
             // Realizamos la interpolación lineal para obtener el valor de la celda en el paso de tiempo siguiente.
             d[XY_TO_ARRAY(i, j)] = s0 * (t0 * d0[XY_TO_ARRAY(i0, j0)] + t1 * d0[XY_TO_ARRAY(i0, j1)]) +
@@ -190,111 +194,29 @@ void solver::advect(const int b, float * d, const float * d0, const float * u, c
     // Aplicamos las condiciones de contorno a la matriz d.
     set_bounds(b, d);
 }
+
 void solver::project(float * u, float * v, float * p, float * div) const
 {
-	switch (method)
-	{
-	case JACOBI:
-		jacobi_project(u, v, p, div);
-		break;
-	case GAUSS_SEIDEL:
-		gauss_seidel_project(u, v, p, div);
-		break;
-	case SOR:
-		sor_project(u, v, p, div);
-		break;
-	}
-}
+	int i, j;
 
-void solver::jacobi_project(float* u, float* v, float* p, float* div) const
-{
-    int i, j;
+	// Paso 1: Calculamos la divergencia del campo de velocidad
+	FOR_EACH_CELL
+		div[XY_TO_ARRAY(i, j)] = -0.5f*(u[XY_TO_ARRAY(i + 1, j)] - u[XY_TO_ARRAY(i - 1, j)] + v[XY_TO_ARRAY(i, j + 1)] - v[XY_TO_ARRAY(i, j - 1)]) / N;
+	p[XY_TO_ARRAY(i, j)] = 0;
+	END_FOR
+	// Paso 2 y 3: Aplicamos las condiciones de contorno
+	set_bounds(0, div);
+	set_bounds(0, p);
 
-    // Paso 1: Calculamos la divergencia del campo de velocidad para cada celda.
-    // La divergencia es una medida de cuánto "fluye" un campo a través de un punto dado.
-    // En este caso, se calcula como la diferencia entre las velocidades en las celdas vecinas, dividida por el tamaño de la celda (`N`).
-    FOR_EACH_CELL
-        div[XY_TO_ARRAY(i, j)] = -0.5f*(u[XY_TO_ARRAY(i + 1, j)] - u[XY_TO_ARRAY(i - 1, j)] + v[XY_TO_ARRAY(i, j + 1)] - v[XY_TO_ARRAY(i, j - 1)]) / N;
-        p[XY_TO_ARRAY(i, j)] = 0;
-    END_FOR
-    set_bounds(0, div);
-    set_bounds(0, p);
+	// Paso 4: Resolvemos el sistema lineal utilizando el método de Gauss-Seidel
+	lin_solve(0, p, div, 1, 4);
 
-    // Paso 2: Resolvemos el sistema lineal utilizando el método de Jacobi.
-    // En cada iteración, se calcula el nuevo valor de `p` en la celda `(i, j)` como el promedio de los valores de `p` en las celdas vecinas y la divergencia en la celda `(i, j)`.
-    // Todos los nuevos valores de `p` se calculan simultáneamente, lo que significa que todos los nuevos valores de `p` se calculan utilizando los valores de `p` del paso de tiempo anterior.
-    for (int k = 0; k < 20; k++) {
-        FOR_EACH_CELL
-            p[XY_TO_ARRAY(i, j)] = (div[XY_TO_ARRAY(i, j)] + p[XY_TO_ARRAY(i - 1, j)] + p[XY_TO_ARRAY(i + 1, j)] + p[XY_TO_ARRAY(i, j - 1)] + p[XY_TO_ARRAY(i, j + 1)]) / 4;
-        END_FOR
-        set_bounds(0, p);
-    }
-
-    // Paso 3: Ajustamos el campo de velocidad para que sea libre de divergencia (masa conservada).
-    // Esto se hace restando la mitad de la diferencia de presiones en las celdas vecinas de las velocidades en la celda `(i, j)`.
-    // Esto asegura que la cantidad total de masa (o densidad) en la cuadrícula se conserve de un paso de tiempo al siguiente.
-    FOR_EACH_CELL
-        u[XY_TO_ARRAY(i, j)] -= 0.5f * N * (p[XY_TO_ARRAY(i + 1, j)] - p[XY_TO_ARRAY(i - 1, j)]);
-        v[XY_TO_ARRAY(i, j)] -= 0.5f * N * (p[XY_TO_ARRAY(i, j + 1)] - p[XY_TO_ARRAY(i, j - 1)]);
-    END_FOR
-    set_bounds(1, u);
-    set_bounds(2, v);
-}
-
-void solver::gauss_seidel_project(float * u, float * v, float * p, float * div) const
-{
-    int i, j;
-
-    // Paso 1: Calculamos la divergencia del campo de velocidad
-    FOR_EACH_CELL
-        div[XY_TO_ARRAY(i, j)] = -0.5f*(u[XY_TO_ARRAY(i + 1, j)] - u[XY_TO_ARRAY(i - 1, j)] + v[XY_TO_ARRAY(i, j + 1)] - v[XY_TO_ARRAY(i, j - 1)]) / N;
-    p[XY_TO_ARRAY(i, j)] = 0;
-    END_FOR
-    // Paso 2 y 3: Aplicamos las condiciones de contorno
-    set_bounds(0, div);
-    set_bounds(0, p);
-
-    // Paso 4: Resolvemos el sistema lineal utilizando el método de Gauss-Seidel
-    lin_solve(0, p, div, 1, 4);
-
-    // Paso 5: Ajustamos el campo de velocidad para que sea libre de divergencia
-    FOR_EACH_CELL
-        u[XY_TO_ARRAY(i, j)] -= 0.5f*N*(p[XY_TO_ARRAY(i + 1, j)] - p[XY_TO_ARRAY(i - 1, j)]);
-        v[XY_TO_ARRAY(i, j)] -= 0.5f*N*(p[XY_TO_ARRAY(i, j + 1)] - p[XY_TO_ARRAY(i, j - 1)]);
-    END_FOR
-    // Paso 6: Aplicamos las condiciones de contorno a las velocidades
-    set_bounds(1, u);
-    set_bounds(2, v);
-}
-void solver::sor_project(float* u, float* v, float* p, float* div) const
-{
-    int i, j;
-
-    // Paso 1: Calculamos la divergencia del campo de velocidad para cada celda.
-    FOR_EACH_CELL
-        div[XY_TO_ARRAY(i, j)] = -0.5f*(u[XY_TO_ARRAY(i + 1, j)] - u[XY_TO_ARRAY(i - 1, j)] + v[XY_TO_ARRAY(i, j + 1)] - v[XY_TO_ARRAY(i, j - 1)]) / N;
-        p[XY_TO_ARRAY(i, j)] = 0;
-    END_FOR
-    set_bounds(0, div);
-    set_bounds(0, p);
-
-    // Paso 2: Resolvemos el sistema lineal utilizando el método de SOR.
-    // En cada iteración, se calcula el nuevo valor de `p` en la celda `(i, j)` como una combinación ponderada del valor anterior de `p` en la celda `(i, j)` y el promedio de los valores de `p` en las celdas vecinas y la divergencia en la celda `(i, j)`.
-    // El factor de ponderación es el factor de relajación `w`, que en este caso es 1.7.
-    for (int k = 0; k < 20; k++) {
-        constexpr float w = 1.7f;
-        FOR_EACH_CELL
-            const float p_new = (div[XY_TO_ARRAY(i, j)] + p[XY_TO_ARRAY(i - 1, j)] + p[XY_TO_ARRAY(i + 1, j)] + p[XY_TO_ARRAY(i, j - 1)] + p[XY_TO_ARRAY(i, j + 1)]) / 4;
-            p[XY_TO_ARRAY(i, j)] = (1 - w) * p[XY_TO_ARRAY(i, j)] + w * p_new;
-        END_FOR
-        set_bounds(0, p);
-    }
-
-    // Paso 3: Ajustamos el campo de velocidad para que sea libre de divergencia (masa conservada).
-    FOR_EACH_CELL
-        u[XY_TO_ARRAY(i, j)] -= 0.5f * N * (p[XY_TO_ARRAY(i + 1, j)] - p[XY_TO_ARRAY(i - 1, j)]);
-        v[XY_TO_ARRAY(i, j)] -= 0.5f * N * (p[XY_TO_ARRAY(i, j + 1)] - p[XY_TO_ARRAY(i, j - 1)]);
-    END_FOR
-    set_bounds(1, u);
-    set_bounds(2, v);
+	// Paso 5: Ajustamos el campo de velocidad para que sea libre de divergencia
+	FOR_EACH_CELL
+		u[XY_TO_ARRAY(i, j)] -= 0.5f*N*(p[XY_TO_ARRAY(i + 1, j)] - p[XY_TO_ARRAY(i - 1, j)]);
+	v[XY_TO_ARRAY(i, j)] -= 0.5f*N*(p[XY_TO_ARRAY(i, j + 1)] - p[XY_TO_ARRAY(i, j - 1)]);
+	END_FOR
+	// Paso 6: Aplicamos las condiciones de contorno a las velocidades
+	set_bounds(1, u);
+	set_bounds(2, v);
 }
